@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Josh's Doodle Jump</title>
+  <style>
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;}
+    body{display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#aee8ff,#d6f7d9);}
+    #wrap{width:100%;max-width:800px;height:450px;background:#e6f7ff;border-radius:14px;position:relative;overflow:hidden;}
+    canvas{width:100%;height:100%;display:block;image-rendering:pixelated;}
+    .panel{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,0.95);border-radius:12px;padding:20px;text-align:center;}
+    button{margin-top:10px;padding:8px 12px;border-radius:8px;border:0;background:#2b9c3b;color:white;font-weight:800;cursor:pointer;}
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="c" width="640" height="360"></canvas>
+    <div id="titleScreen" class="panel">
+      <h1>Josh's Doodle Jump</h1>
+      <div style="margin:10px 0;">Jump as high as you can</div>
+      <button id="startBtn">Play</button>
+    </div>
+  </div>
+  <audio id="sJump" src="https://actions.google.com/sounds/v1/cartoon/boing.ogg" preload="auto"></audio>
+  <audio id="sSpring" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg" preload="auto"></audio>
+  <audio id="sJet" src="https://actions.google.com/sounds/v1/vehicles/rocket_boost.ogg" preload="auto"></audio>
+  <audio id="sHit" src="https://actions.google.com/sounds/v1/cartoon/concussive_drum_hit.ogg" preload="auto"></audio>
+  <audio id="sGameOver" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg" preload="auto"></audio>
+  <script>
+    const canvas=document.getElementById('c');
+    const ctx=canvas.getContext('2d');
+    const W=canvas.width,H=canvas.height;
+    const sJump=document.getElementById('sJump');
+    const sSpring=document.getElementById('sSpring');
+    const sJet=document.getElementById('sJet');
+    const sHit=document.getElementById('sHit');
+    const sGameOver=document.getElementById('sGameOver');
+
+    let platforms=[],objects=[],player=null,keys={left:false,right:false},running=false,last=0;
+    const gravity=0.35,jumpV=-9.8,platformCount=10,maxVertGap=100,maxHReach=160;
+    const PT={NORMAL:0,MOVING:1,BREAK:2};
+
+    function rand(min,max){return Math.random()*(max-min)+min;}
+    function roundRect(ctx,x,y,w,h,r,fill){if(!r)r=6;ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();if(fill)ctx.fill();}
+
+    function reset(){
+      platforms=[];objects=[];
+      platforms.push({x:0,y:H-18,w:W,h:18,type:PT.NORMAL,dir:0,spd:0});
+      let gap=Math.floor((H-50)/platformCount);
+      for(let i=0;i<platformCount;i++){
+        let w=60,x=rand(6,W-w-6),y=H-50-i*gap,type=PT.NORMAL,r=Math.random();
+        if(r<0.12) type=PT.MOVING; else if(r<0.2) type=PT.BREAK;
+        platforms.push({x,y,w,h:14,type,dir:Math.random()<0.5?-1:1,spd:rand(0.6,1.4),used:false});
+      }
+      player={x:W/2-18,y:H-120,w:36,h:36,vx:0,vy:0,score:0};
+      running=false;
+    }
+
+    document.getElementById('startBtn').onclick = () => {
+        document.getElementById('titleScreen').style.display = 'none';
+        reset();
+        running = true;
+        last = performance.now();
+        requestAnimationFrame(loop);
+    };
+
+    window.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='a')keys.left=true;if(e.key==='ArrowRight'||e.key==='d')keys.right=true;});
+    window.addEventListener('keyup',e=>{if(e.key==='ArrowLeft'||e.key==='a')keys.left=false;if(e.key==='ArrowRight'||e.key==='d')keys.right=false;});
+
+    function spawnPlatform(lastY){
+        let w=rand(50,78);
+        let x=rand(Math.max(4,player.x-maxHReach),Math.min(W-w-4,player.x+maxHReach));
+        let y=lastY - rand(50,maxVertGap);
+        let type=Math.random()<0.12?PT.MOVING:(Math.random()<0.12?PT.BREAK:PT.NORMAL);
+        return {x,y,w,h:14,type,dir:Math.random()<0.5?-1:1,spd:rand(0.6,1.4),used:false};
+    }
+
+    function update(dt){
+      if(!player||!running)return;
+      if(keys.left) player.vx=Math.max(player.vx-0.5*dt,-6); else if(keys.right) player.vx=Math.min(player.vx+0.5*dt,6); else player.vx*=0.93;
+      player.x+=player.vx*dt; if(player.x<-player.w) player.x=W;if(player.x>W) player.x=-player.w;
+      player.vy+=gravity*dt; player.y+=player.vy*dt;
+
+      if(player.vy>0){
+        for(let p of platforms){
+          if(player.x+player.w>p.x&&player.x<p.x+p.w){
+            if(player.y+player.h>p.y&&player.y+player.h<p.y+p.h+8&&player.vy>0){
+              if(p.type===PT.BREAK){player.vy=jumpV;sJump.currentTime=0;sJump.play();p.broken=true;p.type=PT.NORMAL;}
+              else{player.vy=jumpV;sJump.currentTime=0;sJump.play();}
+            }
+          }
+        }
+      }
+
+      if(player.y<H*0.45){let dy=H*0.45-player.y;player.y=H*0.45;for(let p of platforms)p.y+=dy;for(let o of objects)o.y+=dy;player.score=(player.score||0)+dy;}
+
+      // Remove off-screen platforms
+      platforms=platforms.filter(p=>p.y<H+20);
+
+      // Add new platforms if needed
+      while(platforms.length<platformCount+5){
+        let lastY=platforms.reduce((min,p)=>Math.min(min,p.y),H);
+        platforms.push(spawnPlatform(lastY));
+      }
+    }
+
+    function drawAlien(x,y,w,h){
+      const cx=x+w/2,cy=y+h/2;
+      ctx.fillStyle='#9aa0a6';roundRect(ctx,x+2,y+4,w-4,h-6,8,true);
+      ctx.fillStyle='#cfd3d6';roundRect(ctx,x+w*0.22,y+h*0.32,w*0.56,h*0.36,6,true);
+      ctx.fillStyle='white';ctx.beginPath();ctx.ellipse(cx-w*0.18,y+h*0.35,w*0.08,h*0.12,0,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.ellipse(cx+w*0.18,y+h*0.35,w*0.08,h*0.12,0,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='black';ctx.beginPath();ctx.ellipse(cx-w*0.18,y+h*0.35,w*0.03,h*0.04,0,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.ellipse(cx+w*0.18,y+h*0.35,w*0.03,h*0.04,0,0,Math.PI*2);ctx.fill();
+      // halo
+      const haloY=y-8+Math.sin(performance.now()/350)*3;
+      ctx.strokeStyle='rgba(255,235,120,0.95)';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(cx,haloY,w*0.32,h*0.08,0,0,Math.PI*2);ctx.stroke();
+    }
+
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+      ctx.fillStyle='linear-gradient(180deg,#aee8ff,#d6f7d9)';ctx.fillRect(0,0,W,H);
+      for(let p of platforms){ctx.fillStyle='#3b8e3b';roundRect(ctx,p.x,p.y,p.w,p.h,6,true);}
+      drawAlien(player.x,player.y,player.w,player.h);
+      ctx.fillStyle='white';ctx.strokeStyle='black';ctx.lineWidth=2;ctx.font='18px monospace';
+      const scoreText=Math.max(0,Math.floor(player.score||0));
+      ctx.strokeText(scoreText,W-10-ctx.measureText(scoreText).width,25);ctx.fillText(scoreText,W-10-ctx.measureText(scoreText).width,25);
+    }
+
+    function loop(t){
+        const dt=(t-last)/16.6667;last=t;
+        update(dt);
+        draw();
+        if(running) requestAnimationFrame(loop);
+    }
+  </script>
+</body>
+</html>
