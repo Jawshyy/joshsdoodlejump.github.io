@@ -65,8 +65,8 @@
         requestAnimationFrame(loop);
     };
 
-    window.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='a')keys.left=true;if(e.key==='ArrowRight'||e.key==='d')keys.right=true;});
-    window.addEventListener('keyup',e=>{if(e.key==='ArrowLeft'||e.key==='a')keys.left=false;if(e.key==='ArrowRight'||e.key==='d')keys.right=false;});
+    window.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='a'||e.key==='f')keys.left=true;if(e.key==='ArrowRight'||e.key==='d'||e.key==='j')keys.right=true;});
+    window.addEventListener('keyup',e=>{if(e.key==='ArrowLeft'||e.key==='a'||e.key==='f')keys.left=false;if(e.key==='ArrowRight'||e.key==='d'||e.key==='j')keys.right=false;});
 
     function spawnPlatform(lastY){
         let w=rand(50,78);
